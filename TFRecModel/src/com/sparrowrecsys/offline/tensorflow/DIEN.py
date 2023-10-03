@@ -18,12 +18,12 @@ import random
 
 # Training samples path, change to your local path
 training_samples_file_path = tf.keras.utils.get_file("trainingSamples.csv",
-                                                     "file:///Users/zhewang/Workspace/SparrowRecSys/src/main"
-                                                     "/resources/webroot/sampledata/trainingSamples.csv")
+                                                     "file:///Users/wangyanfeng/dev_workspace/SparrowRecSys/src/main/resources"
+                                                     "/webroot/sampledata/trainingSamples.csv")
 # Test samples path, change to your local path
 test_samples_file_path = tf.keras.utils.get_file("testSamples.csv",
-                                                 "file:///Users/zhewang/Workspace/SparrowRecSys/src/main"
-                                                 "/resources/webroot/sampledata/testSamples.csv")
+                                                 "file:///Users/wangyanfeng/dev_workspace/SparrowRecSys/src/main/resources"
+                                                 "/webroot/sampledata/testSamples.csv")
 
 
 

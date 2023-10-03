@@ -70,7 +70,7 @@ public class RecSysServer {
 
         //set url handler
         server.setHandler(context);
-        System.out.println("RecSys Server has started.");
+        System.out.println("RecSys Server has started. http://localhost:"+DEFAULT_PORT);
 
         //start Server
         server.start();

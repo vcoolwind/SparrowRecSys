@@ -6,7 +6,11 @@
 
     <groupId>com.wzhe.sparrowrecsys</groupId>
     <artifactId>SparrowRecSys</artifactId>
+    <packaging>pom</packaging>
     <version>1.0-SNAPSHOT</version>
+    <modules>
+        <module>SparkStudy</module>
+    </modules>
 
     <properties>
         <spark.version>2.4.3</spark.version>
