@@ -8,13 +8,13 @@ object DatasetStudy {
   }
 
   def agg(): Unit ={
-    val df:DataFrame = Seq(
-      ("Alice", 25),
-      ("Bob", 30),
-      ("Charlie", 35)
-    ).toDF("Alice")
-
-    val result = df.agg(max("age"), min("age"), avg("age"))
-    result.show()
+//    val df:DataFrame = Seq(
+//      ("Alice", 25),
+//      ("Bob", 30),
+//      ("Charlie", 35)
+//    ).toDF("Alice")
+//
+//    val result = df.agg(max("age"), min("age"), avg("age"))
+//    result.show()
   }
 }
