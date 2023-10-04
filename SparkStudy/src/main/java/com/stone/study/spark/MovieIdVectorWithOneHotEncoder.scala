@@ -46,17 +46,6 @@ object MovieIdVectorWithOneHotEncoder {
 
     vector1.show(10)
     vector2.show(10)
-    // 相同的id会被忽略
-    println(vector1.equals(vector2))
-
-    val vectors = vector2.select(col("movieIdVector")).collect()
-    vectors.foreach(
-      row => {
-        println(row.toString())
-        println(row.getAs[Int](0))
-      }
-    )
-
   }
 
   def oneHotEncoderExample(samples: DataFrame): DataFrame = {

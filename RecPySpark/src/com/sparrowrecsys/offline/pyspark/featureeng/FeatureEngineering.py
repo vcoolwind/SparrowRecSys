@@ -1,11 +1,12 @@
 from pyspark import SparkConf
 from pyspark.ml import Pipeline
-from pyspark.ml.feature import OneHotEncoder, StringIndexer, QuantileDiscretizer, MinMaxScaler
+from pyspark.ml.feature import OneHotEncoder, StringIndexer, \
+  QuantileDiscretizer, MinMaxScaler
 from pyspark.ml.linalg import VectorUDT, Vectors
 from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
 from pyspark.sql.functions import *
 from pyspark.sql.types import *
-from pyspark.sql import functions as F
 
 from com.sparrowrecsys.offline.pyspark.fileutil import getResourcesDir
 
@@ -13,20 +14,23 @@ from com.sparrowrecsys.offline.pyspark.fileutil import getResourcesDir
 def oneHotEncoderExample(movieSamples):
   print("----------oneHotEncoderExample----------")
   # csv的movieId 默认是string，这里映射列名为movieIdNumber，类型为Integer，多一列映射
-  samplesWithIdNumber = movieSamples.withColumn("movieIdNumber", F.col("movieId").cast(IntegerType()))
+  samplesWithIdNumber = movieSamples.withColumn("movieIdNumber",
+                                                F.col("movieId").cast(
+                                                  IntegerType()))
   samplesWithIdNumber.printSchema()
   samplesWithIdNumber.show(10)
 
   #  OneHotEncoder中，输入列为movieIdNumber，输出列为movieIdVector
   # //利用Spark的机器学习库Spark MLlib创建One-hot编码器
-  encoder =  OneHotEncoder(
+  encoder = OneHotEncoder(
     inputCols=["movieIdNumber"],
     outputCols=['movieIdVector'],
     dropLast=False
   )
 
   # 训练One-hot编码器，并完成从id特征到One-hot向量的转换
-  oneHotEncoderSamples = encoder.fit(samplesWithIdNumber).transform(samplesWithIdNumber)
+  oneHotEncoderSamples = encoder.fit(samplesWithIdNumber).transform(
+    samplesWithIdNumber)
   # 打印最终样本的数据结构
   oneHotEncoderSamples.printSchema()
   # 打印10条样本查看结果
@@ -47,6 +51,7 @@ def oneHotEncoderExample(movieSamples):
   #     size：表示向量的长度，即独热编码后的特征数量。
   #     indices：表示非零元素所在的下标位置，是一个整型数组。
   #     values：表示非零元素的值，是一个双精度浮点数数组。
+
 
 def array2vec(genreIndexes, indexSize):
   genreIndexes.sort()
@@ -78,22 +83,31 @@ def ratingFeatures(ratingSamples):
   ratingSamples.printSchema()
   ratingSamples.show()
   # calculate average movie rating score and rating count
-  movieFeatures = ratingSamples.groupBy('movieId').agg(
+  # 利用打分表ratings计算电影的平均分、被打分次数等数值型特征
+  movieFeatures = ratingSamples \
+    .groupBy('movieId') \
+    .agg(
     F.count(F.lit(1)).alias('ratingCount'),
     F.avg("rating").alias("avgRating"),
-    F.variance('rating').alias('ratingVar')) \
+    F.variance('rating').alias('ratingVar')
+  ) \
     .withColumn('avgRatingVec',
-                udf(lambda x: Vectors.dense(x), VectorUDT())('avgRating'))
+                udf(lambda x: Vectors.dense(x), VectorUDT())('avgRating')
+                )
   movieFeatures.show(10)
-  # bucketing
+  exit(0)
+
+  # 分桶处理，创建QuantileDiscretizer进行分桶，将打分次数这一特征分到100个桶中
   ratingCountDiscretizer = QuantileDiscretizer(numBuckets=100,
                                                inputCol="ratingCount",
                                                outputCol="ratingCountBucket")
-  # Normalization
+  # 归一化处理，创建MinMaxScaler进行归一化，将平均得分进行归一化
   ratingScaler = MinMaxScaler(inputCol="avgRatingVec",
                               outputCol="scaleAvgRating")
+  # 创建一个pipeline，依次执行两个特征处理过程
   pipelineStage = [ratingCountDiscretizer, ratingScaler]
   featurePipeline = Pipeline(stages=pipelineStage)
+
   movieProcessedFeatures = featurePipeline.fit(movieFeatures).transform(
     movieFeatures)
   movieProcessedFeatures.show(10)
@@ -110,22 +124,16 @@ if __name__ == '__main__':
   # 加载数据文件，样本集中的每一条数据代表一部电影的信息 movies.csv的数据格式：movieId,title,genres
   movieResourcesPath = file_path + "/webroot/sampledata/movies.csv"
   # csv有header，读取头部
-  movieSamples = spark.read.format('csv').option('header', 'true').load(movieResourcesPath)
+  movieSamples = spark.read.format('csv').option('header', 'true').load(
+    movieResourcesPath)
   print("Raw Movie Samples:")
   movieSamples.printSchema()
   # 显示10行读取的数据
   movieSamples.show(10)
 
-  # 读取打分信息 userId（打分人）,movieId（电影id）,rating（打分数值）,timestamp（打分时间）
-  print("Numerical features Example:")
-  ratingsResourcesPath = file_path + "/webroot/sampledata/ratings.csv"
-  ratingSamples = spark.read.format('csv').option('header', 'true').load(ratingsResourcesPath)
-  ratingSamples.printSchema()
-  ratingSamples.show(10)
-
   oneHot = True
-  multiHot = False
-  ratingFeatures = False
+  multiHot = True
+  ratingFeature = True
 
   if oneHot:
     # one hot 编码
@@ -137,6 +145,13 @@ if __name__ == '__main__':
     print("MultiHotEncoder Example:")
     multiHotEncoderExample(movieSamples)
 
-  if ratingFeatures:
+  # 读取打分信息 userId（打分人）,movieId（电影id）,rating（打分数值）,timestamp（打分时间）
+  print("Numerical features Example:")
+  ratingsResourcesPath = file_path + "/webroot/sampledata/ratings.csv"
+  print(ratingsResourcesPath)
+  ratingSamples = spark.read.format('csv').option('header', 'true').load(
+    ratingsResourcesPath)
+
+  if ratingFeature:
     # 计算打分特征？
     ratingFeatures(ratingSamples)

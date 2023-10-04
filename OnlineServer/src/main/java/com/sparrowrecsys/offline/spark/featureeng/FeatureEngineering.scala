@@ -1,19 +1,20 @@
 package com.sparrowrecsys.offline.spark.featureeng
 
 import org.apache.log4j.{Level, Logger}
-import org.apache.spark.{SparkConf, sql}
-import org.apache.spark.ml.{Pipeline, PipelineStage}
 import org.apache.spark.ml.feature._
+import org.apache.spark.ml.{Pipeline, PipelineStage}
 import org.apache.spark.sql.expressions.UserDefinedFunction
-import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.{SparkConf, sql}
 
 object FeatureEngineering {
   /**
    * One-hot encoding example function
+   *
    * @param samples movie samples dataframe
    */
-  def oneHotEncoderExample(samples:DataFrame): Unit ={
+  def oneHotEncoderExample(samples: DataFrame): Unit = {
     val samplesWithIdNumber = samples.withColumn("movieIdNumber", col("movieId").cast(sql.types.IntegerType))
 
     val oneHotEncoder = new OneHotEncoderEstimator()
@@ -30,24 +31,25 @@ object FeatureEngineering {
 
   /**
    * Multi-hot encoding example function
+   *
    * @param samples movie samples dataframe
    */
-  def multiHotEncoderExample(samples:DataFrame): Unit ={
-    val samplesWithGenre = samples.select(col("movieId"), col("title"),explode(split(col("genres"), "\\|").cast("array<string>")).as("genre"))
+  def multiHotEncoderExample(samples: DataFrame): Unit = {
+    val samplesWithGenre = samples.select(col("movieId"), col("title"), explode(split(col("genres"), "\\|").cast("array<string>")).as("genre"))
     val genreIndexer = new StringIndexer().setInputCol("genre").setOutputCol("genreIndex")
 
-    val stringIndexerModel : StringIndexerModel = genreIndexer.fit(samplesWithGenre)
+    val stringIndexerModel: StringIndexerModel = genreIndexer.fit(samplesWithGenre)
 
     val genreIndexSamples = stringIndexerModel.transform(samplesWithGenre)
       .withColumn("genreIndexInt", col("genreIndex").cast(sql.types.IntegerType))
 
     val indexSize = genreIndexSamples.agg(max(col("genreIndexInt"))).head().getAs[Int](0) + 1
 
-    val processedSamples =  genreIndexSamples
+    val processedSamples = genreIndexSamples
       .groupBy(col("movieId")).agg(collect_list("genreIndexInt").as("genreIndexes"))
-        .withColumn("indexSize", typedLit(indexSize))
+      .withColumn("indexSize", typedLit(indexSize))
 
-    val finalSample = processedSamples.withColumn("vector", array2vec(col("genreIndexes"),col("indexSize")))
+    val finalSample = processedSamples.withColumn("vector", array2vec(col("genreIndexes"), col("indexSize")))
     finalSample.printSchema()
     finalSample.show(10)
   }
@@ -56,28 +58,30 @@ object FeatureEngineering {
 
   /**
    * Process rating samples
+   *
    * @param samples rating samples
    */
-  def ratingFeatures(samples:DataFrame): Unit ={
+  def ratingFeatures(samples: DataFrame): Unit = {
     samples.printSchema()
     samples.show(10)
 
-    //calculate average movie rating score and rating count
+    //利用打分表ratings计算电影的平均分、被打分次数等数值型特征。double2vec把double转为vector
     val movieFeatures = samples.groupBy(col("movieId"))
       .agg(count(lit(1)).as("ratingCount"),
         avg(col("rating")).as("avgRating"),
-        variance(col("rating")).as("ratingVar"))
-        .withColumn("avgRatingVec", double2vec(col("avgRating")))
+        variance(col("rating")).as("ratingVar")
+      )
+      .withColumn("avgRatingVec", double2vec(col("avgRating")))
 
     movieFeatures.show(10)
 
-    //bucketing
+    //分桶处理，创建QuantileDiscretizer进行分桶，将打分次数这一特征分到100个桶中，其实就是对N多的打分次数进行百分制
     val ratingCountDiscretizer = new QuantileDiscretizer()
       .setInputCol("ratingCount")
       .setOutputCol("ratingCountBucket")
       .setNumBuckets(100)
 
-    //Normalization
+    //归一化处理，创建MinMaxScaler进行归一化，将平均得分进行归一化 让打分分布的更有效
     val ratingScaler = new MinMaxScaler()
       .setInputCol("avgRatingVec")
       .setOutputCol("scaleAvgRating")

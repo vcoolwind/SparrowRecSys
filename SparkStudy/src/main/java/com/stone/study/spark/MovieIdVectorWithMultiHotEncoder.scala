@@ -35,14 +35,6 @@ object MovieIdVectorWithMultiHotEncoder {
   }
 
   def multiHotEncoderExample(movieSamples: DataFrame): DataFrame = {
-    // 选择需要的列
-    //    val columns: Array[Column] = Array(
-    //      col("movieId"),
-    //      col("title"),
-    //      explode(split(col("genres"), "\\|").cast("array<string>")).alias("genre")
-    //    )
-    //    val samplesWithGenre: DataFrame = movieSamples.select(columns: _*)
-
     // 选择需要的列,按列展开，形成多行
     val samplesWithGenre = movieSamples
       .select(
@@ -62,20 +54,28 @@ object MovieIdVectorWithMultiHotEncoder {
       .withColumn(("genreIndexInt"), col("genreIndex").cast(IntegerType))
     genreIndexSamples.show()
 
-    // 计算 indexSize
+    // 计算 indexSize,计算有多少维，这里为什么要+1呢？genreIndexInt编号是0开始的。
     val indexSize = genreIndexSamples.agg(max(col("genreIndexInt"))).head().getInt(0) + 1
+    println("indexSize:" + indexSize)
 
-    // 对数据进行处理
-    val processedSamples = genreIndexSamples.groupBy(col("movieId"))
+    // 对数据进行处理，按movieId进行聚合，每个movieId映射到一个数字向量
+    //    lit函数是Spark SQL中的一个函数，用于将常量值转换为Spark SQL中的列 Column。
+    //    lit函数将一个值包装在一个列中，使其可以在Spark SQL中使用。
+    val processedSamples = genreIndexSamples
+      .groupBy(col("movieId"))
       .agg(collect_list(col("genreIndexInt")).alias("genreIndexes"))
       .withColumn("indexSize", lit(indexSize))
+    processedSamples.show()
 
-    // 将 genreIndexes 转换为向量
+    // 将 genreIndexes 转换为向量的函数
     val array2vec = udf((array: Seq[Int], size: Int) => {
       Vectors.sparse(size, array.map(i => (i, 1.0)))
     })
 
-    val finalSample = processedSamples.withColumn("vector", array2vec(col("genreIndexes"), col("indexSize")))
+    // 获取每个movieId对应的vector，注意：这里是多维向量，OneHotEncoder输出的是单维向量
+    val finalSample = processedSamples.withColumn("vector",
+      array2vec(col("genreIndexes"), col("indexSize"))
+    )
     finalSample.printSchema()
     finalSample.show(10, false)
 

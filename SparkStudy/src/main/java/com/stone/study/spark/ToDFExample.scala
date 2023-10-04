@@ -5,6 +5,32 @@ import org.apache.spark.sql.{Row, SparkSession}
 
 object ToDFExample {
   def main(args: Array[String]): Unit = {
+    test1()
+  }
+
+  def test1(): Unit = {
+    // 创建 Seq
+    val data = Seq(
+      ("Alice", "math", 80),
+      ("Bob", "math", 75),
+      ("Charlie", "math", 90),
+      ("Alice", "english", 90),
+      ("Bob", "english", 88),
+      ("Charlie", "english", 79)
+    )
+    val subjectScores = SparkUtil.spark()
+      .createDataFrame(data)
+      .toDF("name", "subject", "score")
+    subjectScores.show()
+
+    subjectScores.filter("score > 80").show()
+    subjectScores.where("score > 80").show()
+
+    subjectScores.groupBy("name").sum("score").show()
+    subjectScores.groupBy("subject").max("score").show()
+  }
+
+  def test2(): Unit = {
     // 创建 SparkSession 对象
     val spark = SparkSession.builder()
       .appName("ToDFExample")
@@ -12,9 +38,9 @@ object ToDFExample {
       .getOrCreate()
     // 创建 Seq
     val data = Seq(
-      ("Alice","math", 80),
-      ("Bob","math" ,75),
-      ("Charlie","math" ,90),
+      ("Alice", "math", 80),
+      ("Bob", "math", 75),
+      ("Charlie", "math", 90),
       ("Alice", "english", 90),
       ("Bob", "english", 88),
       ("Charlie", "english", 79)
