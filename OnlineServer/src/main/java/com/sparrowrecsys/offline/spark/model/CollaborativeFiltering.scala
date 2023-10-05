@@ -6,14 +6,20 @@ import org.apache.spark.ml.recommendation.{ALS, ALSModel}
 import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import redis.clients.jedis.Jedis
+import redis.clients.jedis.params.SetParams
 
 import java.net.URL
-import scala.collection.mutable
+import scala.collection.{Seq, mutable}
 
 /**
  * 协同过滤模型
  */
 object CollaborativeFiltering {
+  val redisEndpoint = "localhost"
+  val redisPort = 6379
+  val redisKeyPrefix = "user"
+  val userRecommendMap = mutable.Map[Int, Seq[String]]()
 
   def main(args: Array[String]): Unit = {
     val spark = SparkUtil.spark("collaborativeFiltering")
@@ -22,42 +28,66 @@ object CollaborativeFiltering {
     val index = path.indexOf("SparrowRecSys")
     val modelDir = path.substring(0, index + "SparrowRecSys".length) + "/output_model/collaborative_model"
 
+    // println(ratingResourcesPath)
+    // generateModel(ratingResourcesPath, modelDir,spark)
+
     println(modelDir)
     loadModel(modelDir, spark)
+
+    val userIds = Seq(8018, 13610, 12955)
+    println("getRecommend form local cache")
+    userIds.foreach(userId => {
+      println(userId + "->" + userRecommendMap.getOrElse(userId, Seq.empty))
+    })
+
+    println("getRecommend form redis cache")
+    userIds.foreach(userId => {
+      println(userId + "->" + getOrElseFromRedis(userId, Seq.empty))
+    })
+
+    //    getRecommend(alsModel, 12, spark)
+    //    getRecommend(alsModel, 16, spark)
+    //    getRecommend(alsModel, 28, spark)
   }
 
   def loadModel(modelDir: String, spark: SparkSession): Unit = {
     val alsModel = ALSModel.load(modelDir)
-    //在Spark中，import spark.implicits._是一个用于导入隐式转换的语句，通常需要在创建SparkSession对象之后使用。
-    //    getRecommend(alsModel, 12, spark)
-    //    getRecommend(alsModel, 16, spark)
-    //    getRecommend(alsModel, 28, spark)
-
     val allUserRecommends = alsModel.recommendForAllUsers(20)
-    val userRecommendMap = mutable.Map[Int, Seq[Int]]()
 
-    allUserRecommends.collect().foreach(row => {
-      val userId = row.getInt(0)
-      val movieIds = row.getAs[Seq[Row]](1).map(row => row.getInt(0))
-      userRecommendMap += (userId -> movieIds)
-    })
-
-    getRecommend(userRecommendMap, 8018)
-    getRecommend(userRecommendMap, 13610)
-    getRecommend(userRecommendMap, 12955)
-
-
-    //    getRecommend(allUserRecommends, 12)
-    //    getRecommend(allUserRecommends, 16)
-    //    getRecommend(allUserRecommends, 28)
+    save2LocalCache(allUserRecommends.collect())
+    save2Redis(allUserRecommends.collect())
   }
 
-  def getRecommend(userRecommendMap: mutable.Map[Int, Seq[Int]], userId: Int): Unit = {
-    val start = System.currentTimeMillis()
-    val seq = userRecommendMap.getOrElse(userId, Seq.empty)
-    println("elapsed time: " + (System.currentTimeMillis() - start))
-    print(userId + "->")
-    println(seq)
+  def getOrElseFromRedis(userId: Int, defaultValue: Seq[String]): Seq[String] = {
+    val redisClient = new Jedis(redisEndpoint, redisPort)
+    val movieIds = redisClient.get(redisKeyPrefix + ":" + userId)
+    if (movieIds == null) {
+      return defaultValue
+    } else {
+      return movieIds.split(",").toSeq
+    }
+  }
+
+  def save2Redis(allUserRecommends: Array[Row]): Unit = {
+    val redisClient = new Jedis(redisEndpoint, redisPort)
+    val params = SetParams.setParams()
+    //set ttl to 24hs
+    params.ex(60 * 60 * 24)
+
+    allUserRecommends.foreach(row => {
+      val userId = row.getInt(0)
+      val movieIds = row.getAs[Seq[Row]](1).map(row => row.getInt(0))
+      redisClient.set(redisKeyPrefix + ":" + userId, movieIds.mkString(","), params)
+    })
+    redisClient.close()
+  }
+
+  def save2LocalCache(allUserRecommends: Array[Row]): Unit = {
+    allUserRecommends.foreach(row => {
+      val userId = row.getInt(0)
+      val movieIds = row.getAs[Seq[Row]](1).map(row => String.valueOf(row.getInt(0)))
+      userRecommendMap += (userId -> movieIds)
+    })
   }
 
   def getRecommend(allUserRecommends: DataFrame, userId: Int): Unit = {
@@ -73,6 +103,7 @@ object CollaborativeFiltering {
   }
 
   def getRecommend(alsModel: ALSModel, userId: Int, spark: SparkSession): Unit = {
+    //在Spark中，import spark.implicits._是一个用于导入隐式转换的语句，通常需要在创建SparkSession对象之后使用。
     import spark.implicits._
     val users = Seq(userId).toDF("userIdInt").as[Int]
     val start = System.currentTimeMillis()
