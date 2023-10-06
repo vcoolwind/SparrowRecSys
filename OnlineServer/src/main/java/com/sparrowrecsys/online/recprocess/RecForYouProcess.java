@@ -127,6 +127,7 @@ public class RecForYouProcess {
         instancesRoot.put("instances", instances);
 
         //need to confirm the tf serving end point
+        // todo tf怎么知道商品和用户的特征呢？不知特征，他也不能根据候选进行排序
         String predictionScores = asyncSinglePostRequest("http://localhost:8501/v1/models/recmodel:predict", instancesRoot.toString());
         System.out.println("send user" + user.getUserId() + " request to tf serving.");
 
