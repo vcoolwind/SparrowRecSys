@@ -38,7 +38,6 @@ def getOutputModelDataDir(*args):
     data_project_name = "output_model_data"
     fix_dir = os.path.join(root_dir, root_project_name, data_project_name)
     resources_dir = os.path.join(fix_dir, *args)
-    os.makedirs(resources_dir)
     placeholder = ""
     if not resources_dir.startswith("/"):
         placeholder = "/"
